@@ -29,7 +29,6 @@ def repeat(phrase):
         say(phrase[4:len(phrase)])
 
 def getWeather(phrase):
-    print(phrase)
     weather_url = "https://weather.com/weather/tenday/l/USMA0046:1:US"
     http_pool = urllib3.connection_from_url(weather_url)
     html = http_pool.urlopen('Get',weather_url)
