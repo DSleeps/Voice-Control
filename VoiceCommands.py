@@ -11,14 +11,19 @@ from datetime import timedelta
 from threading import Timer
 import os
 
+digits = "1234567890"
+
 #The phrase you have to say to activate this
 keyPhrase = "hey carl"
 
 #Phrase said when the keyphrase is said
 commandPhrase = "What do you need?"
 
+#Speech recognizing stuff
 recognizer = sr.Recognizer()
 mic = sr.Microphone()
+
+#Speaking engine
 engine = ps.init()
 
 #Set to true when the keyword is said
@@ -81,6 +86,8 @@ def getWeather(phrase):
         for i in range(s_td.find("title")+7,len(s_td)):
             if s_td[i] == "\"":
                 break
+            if s_td[i] == "F" and s_td[i-1] in digits:
+                text = text + " degrees"
             else:
                 text = text + s_td[i]
         print(text)
@@ -183,6 +190,7 @@ def set_reminder(phrase):
     if "timer" in phrase:
         reminder_phrase = "The timer is done"
     elif "alarm" in phrase:
+        #Need to actuallu make this a sound instead of just saying alarm is going off
         reminder_phrase = "Alarm is going off. Wake up Dylan."
     else:
         lower_bound = 0
@@ -386,7 +394,6 @@ while True:
             #Timers contain the start and end dates
             if datetime.now() >= timers[i]:
                 remind(i)
-
 
 #Stops the listening
 stop_listening(wait_for_stop=True)
