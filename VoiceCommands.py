@@ -182,6 +182,8 @@ def set_reminder(phrase):
     reminder_phrase = ""
     if "timer" in phrase:
         reminder_phrase = "The timer is done"
+    elif "alarm" in phrase:
+        reminder_phrase = "Alarm is going off. Wake up Dylan."
     else:
         lower_bound = 0
         upper_bound = 0
@@ -210,6 +212,8 @@ def set_reminder(phrase):
 
     if "timer" in phrase:
         say("Timer set")
+    elif "alarm" in phrase:
+        say("Alarm set")
     else:
         say("Reminder set")
 
@@ -283,7 +287,7 @@ def get_time(phrase):
 def exit_program(phrase):
     os._exit(1)
 
-commands = {"say": repeat, "weather": getWeather, "temp": getWeather, "remind": set_reminder, "timer": set_reminder, "left": get_time_left, "time": get_time, "date": get_date, "exit": exit_program}
+commands = {"say": repeat, "weather": getWeather, "temp": getWeather, "remind": set_reminder, "timer": set_reminder, "alarm":set_reminder, "left": get_time_left, "time": get_time, "date": get_date, "exit": exit_program}
 
 def say(phrase):
     engine.say(phrase)
