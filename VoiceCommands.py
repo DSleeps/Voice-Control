@@ -29,7 +29,6 @@ checkCount = 2
 
 #This is a list of all of the timer/reminders that have been set
 timers = []
-start_times = []
 reminder_phrases = []
 
 phraseSaid = ""
@@ -113,24 +112,71 @@ def set_reminder(phrase):
 
     #This analyzes the phrase to figure out how much time you want to set
     t_phrase = tokenize(phrase)
-    delta_seconds = 0
-    delta_minutes = 0
-    delta_hours = 0
-    if "second" in phrase:
+
+    if "at" in t_phrase:
         for i in range(len(t_phrase)):
-            if "second" in t_phrase[i]:
-                #The word right before second should be the correct number of seconds
-                delta_seconds = float(t_phrase[i-1])
-    if "minute" in phrase:
-        for i in range(len(t_phrase)):
-            if "minute" in t_phrase[i]:
-                #The word right before second should be the correct number of seconds
-                delta_minutes = float(t_phrase[i-1])
-    if "hour" in phrase:
-        for i in range(len(t_phrase)):
-            if "hour" in t_phrase[i]:
-                #The word right before second should be the correct number of seconds
-                delta_hours = float(t_phrase[i-1])
+            if t_phrase[i] == "at":
+                number_start = i + 1
+
+        end_time = t_phrase[number_start]
+        hour_found = False
+        hour = ""
+        minute = "0"
+        for l in end_time:
+            #If a colon shows up it means thehour minute is done and it's time to look at minutes
+            if l == ':':
+                hour_found = True
+            elif hour_found == False:
+                hour = hour + l
+            else:
+                minute = minute + l
+
+        hour = int(hour.lstrip('0'))
+        minute = minute.lstrip('0')
+        if len(minute) != 0:
+            minute = int(minute)
+        else:
+            minute = 0
+        if "am" in t_phrase:
+            pass
+        else:
+            hour = hour + 12
+
+        timer_time = datetime(time_now.year, time_now.month, time_now.day, hour=hour, minute=minute)
+        print(str(time_now) + " | " + str(timer_time))
+        timers.append(timer_time)
+
+        lower_bound_word = "to"
+        upper_bound_word = "at"
+    else:
+        delta_seconds = 0
+        delta_minutes = 0
+        delta_hours = 0
+        if "second" in phrase:
+            for i in range(len(t_phrase)):
+                if "second" in t_phrase[i]:
+                    #The word right before second should be the correct number of seconds
+                    delta_seconds = float(t_phrase[i-1])
+        if "minute" in phrase:
+            for i in range(len(t_phrase)):
+                if "minute" in t_phrase[i]:
+                    #The word right before second should be the correct number of seconds
+                    delta_minutes = float(t_phrase[i-1])
+        if "hour" in phrase:
+            for i in range(len(t_phrase)):
+                if "hour" in t_phrase[i]:
+                    #The word right before second should be the correct number of seconds
+                    delta_hours = float(t_phrase[i-1])
+
+        #This code would calculate the reminder time by constantly checking to see
+        #if the date had changed
+        delta_time = timedelta(hours=delta_hours, minutes=delta_minutes, seconds=delta_seconds)
+        end_time = time_now + delta_time
+        print(str(time_now) + " | " + str(end_time))
+        timers.append(end_time)
+
+        lower_bound_word = "to"
+        upper_bound_word = "in"
 
     #This analyzes the phrase to figure out what you want to be reminded of
     reminder_phrase = ""
@@ -139,13 +185,13 @@ def set_reminder(phrase):
     else:
         lower_bound = 0
         upper_bound = 0
-        if "to" in t_phrase:
+        if lower_bound_word in t_phrase:
             for i in range(len(t_phrase)):
-                if t_phrase[i] == "to":
+                if t_phrase[i] == lower_bound_word:
                     lower_bound = i + 1
-        if "in" in t_phrase:
+        if upper_bound_word in t_phrase:
             for i in range(len(t_phrase)):
-                if t_phrase[i] == "in":
+                if t_phrase[i] == upper_bound_word:
                     upper_bound = i
         if upper_bound < lower_bound:
             for word in t_phrase[lower_bound:]:
@@ -157,22 +203,7 @@ def set_reminder(phrase):
                 reminder_phrase = reminder_phrase + " " + word
             reminder_phrase = reminder_phrase + "."
             reminder_phrase = reminder_phrase.strip()
-    #This code would calculate the reminder time by constantly checking to see
-    #if the date had changed
-    '''
-    delta_time = timedelta(hours=delta_hours, minutes=delta_minutes, seconds=delta_seconds)
-    end_time = time_now + delta_time
-    print(str(time_now) + " | " + str(end_time))
-    '''
 
-    #Change in time in seconds
-    delta_time = delta_seconds + delta_minutes*60 + delta_hours*3600
-    print(delta_time)
-    #Adds and starts the most recent timer added, which is this one
-    timers.append(Timer(delta_time, remind))
-    timers[len(timers)-1].start()
-
-    start_times.append(time.time())
     reminder_phrases.append(reminder_phrase)
 
     print(reminder_phrase)
@@ -183,14 +214,17 @@ def set_reminder(phrase):
         say("Reminder set")
 
 def get_time_left(phrase):
-    time_left = timers[0].interval - (time.time() - start_times[0])
+
+    time_now = datetime.now()
+    delta_time = timers[0] - time_now
+
+    #In seconds
+    time_left = delta_time.total_seconds()
 
     hours_left = int(time_left/3600)
     minutes_left = int((time_left - hours_left*3600)/(60))
     seconds_left = int(time_left - hours_left*3600 - minutes_left*60)
-    print(timers[0].interval)
-    print(time.time())
-    print(start_times[0])
+
     print(hours_left)
     print(minutes_left)
     print(seconds_left)
@@ -208,13 +242,13 @@ def get_time_left(phrase):
         say("There are " + str(hours_left) + " hours and " + str(minutes_left) + " minutes left.")
 
 
-def remind():
+def remind(timer_num):
     print("Done")
-    say(reminder_phrases[0])
+    say(reminder_phrases[timer_num])
 
     #Remove the timer and the reminder phrase
-    del reminder_phrases[0]
-    del timers[0]
+    del reminder_phrases[timer_num]
+    del timers[timer_num]
 
 def get_date(phrase):
     today_date = date.today().timetuple()
@@ -343,7 +377,13 @@ while True:
         listen_for_command(phraseSaid)
         key_phrase_said = False
         stop_listening = recognizer.listen_in_background(mic, callback)
+    if len(timers) != 0:
+        for i in range(len(timers)):
+            #Timers contain the start and end dates
+            if datetime.now() >= timers[i]:
+                remind(i)
+
 
 #Stops the listening
-#stop_listening(wait_for_stop=True)
-print("Done")
+stop_listening(wait_for_stop=True)
+print("Doneeeeeeeeeee")

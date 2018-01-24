@@ -1,0 +1,2 @@
+python VoiceCommands.py
+pause
