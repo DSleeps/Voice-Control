@@ -38,6 +38,39 @@ reminder_phrases = []
 
 phraseSaid = ""
 
+months = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June", 7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"}
+weekdays = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday", 4: "Friday", 5: "Saturday", 6: "Sunday"}
+weekday_to_num = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+
+class ReminderType:
+    Reminder = 0
+    Timer = 1
+    Alarm = 2
+
+class Reminder:
+
+    def __init__(self, time, reminder_type, reminder_phrase="", does_repeat=False, repeat_days=[]):
+        self.time = time
+        self.reminder_type = reminder_type
+        self.reminder_phrase = reminder_phrase
+        self.does_repeat = does_repeat
+        self.repeat_days = repeat_days
+
+    def get_time(self):
+        return self.time
+
+    def get_reminder_phrase(self):
+        return self.reminder_phrase
+
+    def add_repeat(self, weekday):
+        if type(weekday) is string:
+            repeat_day = weekday_to_num[weekday]
+            if not repeat_day in self.repeat_days:
+                self.repeat_days.append(repeat_day)
+        else:
+            if not weekday in self.repeat_days:
+                self.repeat_days.append(weekday)
+
 #All of the commands
 #Repeats whatever the person says
 def repeat(phrase):
@@ -93,9 +126,6 @@ def getWeather(phrase):
         print(text)
         say(text)
         return None
-
-months = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June", 7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"}
-weekdays = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday", 4: "Friday", 5: "Saturday", 6: "Sunday"}
 
 #Separates each word from eachother and puts them in a list
 def tokenize(input_string):
@@ -188,8 +218,7 @@ def set_alarm(phrase):
     for alarm_time in times:
         time = convert_to_time(alarm_time)
         print(time)
-        timers.append(time)
-        reminder_phrases.append("Ring ring ring your alarm is going off")
+        timers.append(Reminder(time, ReminderType.Alarm, reminder_phrase="Ring ring ring your alarm is going off"))
         print(len(timers))
 
 def set_reminder(phrase):
@@ -208,18 +237,14 @@ def set_reminder(phrase):
             if t_phrase[i] == "at":
                 number_start = i + 1
 
-        timer_time = convert_to_time(t_phrase[number_start])
-        print(timer_time)
-        timers.append(timer_time)
-        print(len(timers))
+        end_time = convert_to_time(t_phrase[number_start])
+        print(end_time)
 
         lower_bound_word = "to"
         upper_bound_word = "at"
     else:
         end_time = convert_to_time(phrase)
         print(end_time)
-        timers.append(end_time)
-        print(len(timers))
 
         lower_bound_word = "to"
         upper_bound_word = "in"
@@ -227,7 +252,7 @@ def set_reminder(phrase):
     #This analyzes the phrase to figure out what you want to be reminded of
     reminder_phrase = ""
     if "timer" in phrase:
-        reminder_phrase = "The timer is done"
+        timers.append(Reminder(end_time, ReminderType.Timer, reminder_phrase="The timer is done"))
     else:
         lower_bound = 0
         upper_bound = 0
@@ -250,7 +275,7 @@ def set_reminder(phrase):
             reminder_phrase = reminder_phrase + "."
             reminder_phrase = reminder_phrase.strip()
 
-    reminder_phrases.append(reminder_phrase)
+        timers.append(Reminder(end_time, ReminderType.Reminder, reminder_phrase=reminder_phrase))
 
     print(reminder_phrase)
 
@@ -262,7 +287,7 @@ def set_reminder(phrase):
 def get_time_left(phrase):
 
     time_now = datetime.now()
-    delta_time = timers[0] - time_now
+    delta_time = timers[0].get_time() - time_now
 
     #In seconds
     time_left = delta_time.total_seconds()
@@ -292,10 +317,9 @@ def remind(timer_num):
     print("Done")
 
     #The say command seems to break the entire system sometimes, it's unclear why
-    say(reminder_phrases[timer_num])
+    say(timers[timer_num].get_reminder_phrase())
 
     #Remove the timer and the reminder phrase
-    del reminder_phrases[timer_num]
     del timers[timer_num]
     print("Stuff removed")
 
@@ -429,7 +453,7 @@ while True:
     if len(timers) != 0:
         for i in range(len(timers)):
             #Timers contain the start and end dates
-            if datetime.now() >= timers[i]:
+            if datetime.now() >= timers[i].get_time():
                 stop_listening(wait_for_stop=True)
                 remind(i)
                 stop_listening = recognizer.listen_in_background(mic, callback)
