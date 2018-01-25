@@ -14,7 +14,7 @@ import os
 digits = "1234567890"
 
 #The phrase you have to say to activate this
-keyPhrase = "hey carl"
+keyPhrase = "hey delta"
 
 #Phrase said when the keyphrase is said
 commandPhrase = "What do you need?"
@@ -110,7 +110,90 @@ def tokenize(input_string):
     tokenized.append(temp)
     return tokenized
 
+def convert_to_time(time):
+    time_now = datetime.now()
+    #The len(time) ensures that there were no seconds minutes or hours said
+    if ":" in time or len(time) <= 3:
+        hour_found = False
+        hour = ""
+        minute = "0"
+        for l in time:
+            #If a colon shows up it means thehour minute is done and it's time to look at minutes
+            if l == ':':
+                hour_found = True
+            elif hour_found == False:
+                hour = hour + l
+            else:
+                minute = minute + l
+        print(hour)
+        hour = hour.lstrip('0')
+        print(hour)
+        hour = int(hour)
+        minute = minute.lstrip('0')
+        if len(minute) != 0:
+            minute = int(minute)
+        else:
+            minute = 0
+        if "a.m" in time:
+            if time == 12:
+                hour = hour - 12
+        elif hour != 12:
+            hour = hour + 12
+
+        timer_time = datetime(time_now.year, time_now.month, time_now.day, hour=hour, minute=minute)
+        return timer_time
+
+    else:
+        t_phrase = tokenize(time)
+        delta_seconds = 0
+        delta_minutes = 0
+        delta_hours = 0
+        if "second" in time:
+            for i in range(len(t_phrase)):
+                if "second" in t_phrase[i]:
+                    #The word right before second should be the correct number of seconds
+                    delta_seconds = float(t_phrase[i-1])
+        if "minute" in time:
+            for i in range(len(t_phrase)):
+                if "minute" in t_phrase[i]:
+                    #The word right before second should be the correct number of seconds
+                    delta_minutes = float(t_phrase[i-1])
+        if "hour" in time:
+            for i in range(len(t_phrase)):
+                if "hour" in t_phrase[i]:
+                    #The word right before second should be the correct number of seconds
+                    delta_hours = float(t_phrase[i-1])
+
+        #This code would calculate the reminder time by constantly checking to see
+        #if the date had changed
+        delta_time = timedelta(hours=delta_hours, minutes=delta_minutes, seconds=delta_seconds)
+        end_time = time_now + delta_time
+        return end_time
+
+def set_alarm(phrase):
+    print(digits)
+
+    time_now = datetime.now()
+
+    t_phrase = tokenize(phrase)
+    times = []
+    for t in t_phrase:
+        for char in t:
+            if char in digits:
+                times.append(t)
+                break
+
+    print(len(times))
+    print(times)
+    for alarm_time in times:
+        time = convert_to_time(alarm_time)
+        print(time)
+        timers.append(time)
+        reminder_phrases.append("Ring ring ring your alarm is going off")
+        print(len(timers))
+
 def set_reminder(phrase):
+    global timers
     time_now = datetime.now()
 
     today_hour = time_now.hour
@@ -125,62 +208,18 @@ def set_reminder(phrase):
             if t_phrase[i] == "at":
                 number_start = i + 1
 
-        end_time = t_phrase[number_start]
-        hour_found = False
-        hour = ""
-        minute = "0"
-        for l in end_time:
-            #If a colon shows up it means thehour minute is done and it's time to look at minutes
-            if l == ':':
-                hour_found = True
-            elif hour_found == False:
-                hour = hour + l
-            else:
-                minute = minute + l
-
-        hour = int(hour.lstrip('0'))
-        minute = minute.lstrip('0')
-        if len(minute) != 0:
-            minute = int(minute)
-        else:
-            minute = 0
-        if "am" in t_phrase:
-            pass
-        else:
-            hour = hour + 12
-
-        timer_time = datetime(time_now.year, time_now.month, time_now.day, hour=hour, minute=minute)
-        print(str(time_now) + " | " + str(timer_time))
+        timer_time = convert_to_time(t_phrase[number_start])
+        print(timer_time)
         timers.append(timer_time)
+        print(len(timers))
 
         lower_bound_word = "to"
         upper_bound_word = "at"
     else:
-        delta_seconds = 0
-        delta_minutes = 0
-        delta_hours = 0
-        if "second" in phrase:
-            for i in range(len(t_phrase)):
-                if "second" in t_phrase[i]:
-                    #The word right before second should be the correct number of seconds
-                    delta_seconds = float(t_phrase[i-1])
-        if "minute" in phrase:
-            for i in range(len(t_phrase)):
-                if "minute" in t_phrase[i]:
-                    #The word right before second should be the correct number of seconds
-                    delta_minutes = float(t_phrase[i-1])
-        if "hour" in phrase:
-            for i in range(len(t_phrase)):
-                if "hour" in t_phrase[i]:
-                    #The word right before second should be the correct number of seconds
-                    delta_hours = float(t_phrase[i-1])
-
-        #This code would calculate the reminder time by constantly checking to see
-        #if the date had changed
-        delta_time = timedelta(hours=delta_hours, minutes=delta_minutes, seconds=delta_seconds)
-        end_time = time_now + delta_time
-        print(str(time_now) + " | " + str(end_time))
+        end_time = convert_to_time(phrase)
+        print(end_time)
         timers.append(end_time)
+        print(len(timers))
 
         lower_bound_word = "to"
         upper_bound_word = "in"
@@ -189,9 +228,6 @@ def set_reminder(phrase):
     reminder_phrase = ""
     if "timer" in phrase:
         reminder_phrase = "The timer is done"
-    elif "alarm" in phrase:
-        #Need to actuallu make this a sound instead of just saying alarm is going off
-        reminder_phrase = "Alarm is going off. Wake up Dylan."
     else:
         lower_bound = 0
         upper_bound = 0
@@ -220,8 +256,6 @@ def set_reminder(phrase):
 
     if "timer" in phrase:
         say("Timer set")
-    elif "alarm" in phrase:
-        say("Alarm set")
     else:
         say("Reminder set")
 
@@ -256,11 +290,14 @@ def get_time_left(phrase):
 
 def remind(timer_num):
     print("Done")
+
+    #The say command seems to break the entire system sometimes, it's unclear why
     say(reminder_phrases[timer_num])
 
     #Remove the timer and the reminder phrase
     del reminder_phrases[timer_num]
     del timers[timer_num]
+    print("Stuff removed")
 
 def get_date(phrase):
     today_date = date.today().timetuple()
@@ -295,7 +332,7 @@ def get_time(phrase):
 def exit_program(phrase):
     os._exit(1)
 
-commands = {"say": repeat, "weather": getWeather, "temp": getWeather, "remind": set_reminder, "timer": set_reminder, "alarm":set_reminder, "left": get_time_left, "time": get_time, "date": get_date, "exit": exit_program}
+commands = {"say": repeat, "weather": getWeather, "temp": getWeather, "remind": set_reminder, "timer": set_reminder, "alarm":set_alarm, "left": get_time_left, "time": get_time, "date": get_date, "exit": exit_program}
 
 def say(phrase):
     engine.say(phrase)
@@ -393,7 +430,10 @@ while True:
         for i in range(len(timers)):
             #Timers contain the start and end dates
             if datetime.now() >= timers[i]:
+                stop_listening(wait_for_stop=True)
                 remind(i)
+                stop_listening = recognizer.listen_in_background(mic, callback)
+                break
 
 #Stops the listening
 stop_listening(wait_for_stop=True)
