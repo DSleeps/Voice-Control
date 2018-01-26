@@ -13,6 +13,9 @@ import os
 
 digits = "1234567890"
 
+today = date.today()
+tomorrow = today + timedelta(days=1)
+
 #The phrase you have to say to activate this
 keyPhrase = "hey delta"
 
@@ -42,6 +45,8 @@ months = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "Jun
 weekdays = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday", 4: "Friday", 5: "Saturday", 6: "Sunday"}
 weekday_to_num = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
 
+alarms = {0:[], 1:[], 2:[], 3:[], 4:[], 5:[], 6:[]}
+
 class ReminderType:
     Reminder = 0
     Timer = 1
@@ -62,14 +67,29 @@ class Reminder:
     def get_reminder_phrase(self):
         return self.reminder_phrase
 
-    def add_repeat(self, weekday):
-        if type(weekday) is string:
+    def get_days(self):
+        return self.repeat_days
+
+    def get_type(self):
+        return self.reminder_type
+
+    def is_repeating(self):
+        return self.does_repeat
+
+    def add_day(self, weekday):
+        if type(weekday) is type('string'):
             repeat_day = weekday_to_num[weekday]
             if not repeat_day in self.repeat_days:
                 self.repeat_days.append(repeat_day)
         else:
             if not weekday in self.repeat_days:
                 self.repeat_days.append(weekday)
+
+    def set_time(new_time):
+        self.time = new_time
+
+    def set_repeat(self, is_repeat):
+        self.does_repeat = is_repeat
 
 #All of the commands
 #Repeats whatever the person says
@@ -201,8 +221,6 @@ def convert_to_time(time):
         return end_time
 
 def set_alarm(phrase):
-    print(digits)
-
     time_now = datetime.now()
 
     t_phrase = tokenize(phrase)
@@ -213,13 +231,49 @@ def set_alarm(phrase):
                 times.append(t)
                 break
 
-    print(len(times))
+    new_reminders = []
     print(times)
     for alarm_time in times:
         time = convert_to_time(alarm_time)
+        new_reminders.append(Reminder(time, ReminderType.Alarm, reminder_phrase="Ring ring it's an alarm"))
         print(time)
-        timers.append(Reminder(time, ReminderType.Alarm, reminder_phrase="Ring ring ring your alarm is going off"))
-        print(len(timers))
+
+    weekday_said = False
+    for key in list(weekday_to_num.keys()):
+        if key in phrase:
+            weekday_said = True
+            for reminder in new_reminders:
+                reminder.add_day(weekday_to_num[key])
+
+    if "repeat" in phrase or "every" in phrase:
+        for reminder in new_reminders:
+            reminder.set_repeat(True)
+
+    for reminder in new_reminders:
+        for day in reminder.get_days():
+            alarms[day].append(reminder)
+
+    print(alarms)
+
+    #If no weekday is said add the alarms to the immediate timer
+    if weekday_said == False:
+        for reminder in new_reminders:
+            timers.append(Reminder(reminder))
+            print(len(timers))
+    else:
+        #If a weekday is specified check if it is today
+        for reminder in new_reminders:
+            for weekday in reminder.get_days():
+                #If it is today and the time hasn't passed yet, set it to today's alarms
+                if weekday == time_now.weekday() and time_now < reminder.get_time():
+                    print("Added to today's timer")
+                    timers.append(reminder)
+
+    if len(new_reminders) > 1:
+        say("Alarms set")
+    else:
+        say("Alarm set")
+
 
 def set_reminder(phrase):
     global timers
@@ -312,12 +366,18 @@ def get_time_left(phrase):
     else:
         say("There are " + str(hours_left) + " hours and " + str(minutes_left) + " minutes left.")
 
-
 def remind(timer_num):
     print("Done")
 
     #The say command seems to break the entire system sometimes, it's unclear why
     say(timers[timer_num].get_reminder_phrase())
+    r = timers[timer_num]
+
+    if r.get_type() == ReminderType.Alarm and r.is_repeating() == False:
+        now = datetime.now()
+        alarms[now.weekday()].remove(r)
+        print("Alarm removed")
+        print(alarms)
 
     #Remove the timer and the reminder phrase
     del timers[timer_num]
@@ -458,6 +518,23 @@ while True:
                 remind(i)
                 stop_listening = recognizer.listen_in_background(mic, callback)
                 break
+
+    #If it switches to tomorrow add all of the new alarms
+    if date.today() > tomorrow:
+        #This code resets tomorrow
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+
+        weekday = datetime.now().weekday()
+        for alarm in alarms[weekday]:
+            #This code alters the time of the alarm to make sure it is on the right day
+            alarm_time = alarm.get_time()
+            alarm_time.replace(day=today.day)
+            alarm_time.replace(month=today.month)
+            alarm_time.replace(year=today.year)
+            alarm.set_time(alarm_time)
+
+            timers.append(alarm)
 
 #Stops the listening
 stop_listening(wait_for_stop=True)
