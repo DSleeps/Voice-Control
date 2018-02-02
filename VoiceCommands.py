@@ -16,8 +16,11 @@ digits = "1234567890"
 today = date.today()
 tomorrow = today + timedelta(days=1)
 
+
+#Machine Operated Neurological Technological Enhancement
 #The phrase you have to say to activate this
-keyPhrase = "hey delta"
+keyPhrase1 = "hey adam"
+keyPhrase2 = "hey atom"
 
 #Phrase said when the keyphrase is said
 commandPhrase = "What do you need?"
@@ -60,6 +63,7 @@ class Reminder:
         self.reminder_phrase = reminder_phrase
         self.does_repeat = does_repeat
         self.repeat_days = repeat_days
+        self.is_silenced = False
 
     def get_time(self):
         return self.time
@@ -72,6 +76,9 @@ class Reminder:
 
     def get_type(self):
         return self.reminder_type
+
+    def is_silent(self):
+        return self.is_silenced
 
     def is_repeating(self):
         return self.does_repeat
@@ -90,6 +97,9 @@ class Reminder:
 
     def set_repeat(self, is_repeat):
         self.does_repeat = is_repeat
+
+    def set_silence(self, silence):
+        self.is_silenced = silence
 
 #All of the commands
 #Repeats whatever the person says
@@ -223,57 +233,92 @@ def convert_to_time(time):
 def set_alarm(phrase):
     time_now = datetime.now()
 
-    t_phrase = tokenize(phrase)
-    times = []
-    for t in t_phrase:
-        for char in t:
-            if char in digits:
-                times.append(t)
-                break
+    if "cancel" in phrase or "silen" in phrase:
+        if "today" in phrase:
+            if "cancel" in phrase:
+                alarms[time_now.weekday()] = []
+                #Also have to remove all of the alarms from the timers
+                for timer in timers:
+                    if timer.get_type() == ReminderType.Alarm:
+                        timers.remove(timer)
+            else:
+                for alarm in alarms[time_now.weekday()]:
+                    alarm.set_silence(True)
+        elif "tomorrow" in phrase:
+            weekday = time_now.weekday() + 1
+            if weekday >= 7:
+                weekday += -7
+            if "cancel" in phrase:
+                alarms[weekday] = []
+            else:
+                for alarm in alarms[weekday]:
+                    alarm.set_silence(True)
+        else:
+            for weekday in list(weekday_to_num.keys()):
+                if weekday in phrase:
+                    #Removes all of the alarms from the list
+                    if "cancel" in phrase:
+                        alarms[weekday_to_num[weekday]] = []
+                    else:
+                        for alarm in alarms[weekday_to_num[weekday]]:
+                            alarm.set_silence(True)
+        print(alarms)
+        if "cancel" in phrase:
+            say("Alarms canceled")
+        else:
+            say("Alarms silenced")
 
-    new_reminders = []
-    print(times)
-    for alarm_time in times:
-        time = convert_to_time(alarm_time)
-        new_reminders.append(Reminder(time, ReminderType.Alarm, reminder_phrase="Ring ring it's an alarm"))
-        print(time)
+    else:
+        t_phrase = tokenize(phrase)
+        times = []
+        for t in t_phrase:
+            for char in t:
+                if char in digits:
+                    times.append(t)
+                    break
 
-    weekday_said = False
-    for key in list(weekday_to_num.keys()):
-        if key in phrase:
-            weekday_said = True
+        new_reminders = []
+        print(times)
+        for alarm_time in times:
+            time = convert_to_time(alarm_time)
+            new_reminders.append(Reminder(time, ReminderType.Alarm, reminder_phrase="Ring ring it's an alarm"))
+            print(time)
+
+        weekday_said = False
+        for key in list(weekday_to_num.keys()):
+            if key in phrase:
+                weekday_said = True
+                for reminder in new_reminders:
+                    reminder.add_day(weekday_to_num[key])
+
+        if "repeat" in phrase or "every" in phrase:
             for reminder in new_reminders:
-                reminder.add_day(weekday_to_num[key])
+                reminder.set_repeat(True)
 
-    if "repeat" in phrase or "every" in phrase:
         for reminder in new_reminders:
-            reminder.set_repeat(True)
+            for day in reminder.get_days():
+                alarms[day].append(reminder)
 
-    for reminder in new_reminders:
-        for day in reminder.get_days():
-            alarms[day].append(reminder)
+        print(alarms)
 
-    print(alarms)
+        #If no weekday is said add the alarms to the immediate timer
+        if weekday_said == False:
+            for reminder in new_reminders:
+                timers.append(Reminder(reminder))
+                print(len(timers))
+        else:
+            #If a weekday is specified check if it is today
+            for reminder in new_reminders:
+                for weekday in reminder.get_days():
+                    #If it is today and the time hasn't passed yet, set it to today's alarms
+                    if weekday == time_now.weekday() and time_now < reminder.get_time():
+                        print("Added to today's timer")
+                        timers.append(reminder)
 
-    #If no weekday is said add the alarms to the immediate timer
-    if weekday_said == False:
-        for reminder in new_reminders:
-            timers.append(Reminder(reminder))
-            print(len(timers))
-    else:
-        #If a weekday is specified check if it is today
-        for reminder in new_reminders:
-            for weekday in reminder.get_days():
-                #If it is today and the time hasn't passed yet, set it to today's alarms
-                if weekday == time_now.weekday() and time_now < reminder.get_time():
-                    print("Added to today's timer")
-                    timers.append(reminder)
-
-    if len(new_reminders) > 1:
-        say("Alarms set")
-    else:
-        say("Alarm set")
-
+        if len(new_reminders) > 1:
+            say("Alarms set")
+        else:
+            say("Alarm set")
 
 def set_reminder(phrase):
     global timers
@@ -286,57 +331,69 @@ def set_reminder(phrase):
     #This analyzes the phrase to figure out how much time you want to set
     t_phrase = tokenize(phrase)
 
-    if "at" in t_phrase:
-        for i in range(len(t_phrase)):
-            if t_phrase[i] == "at":
-                number_start = i + 1
-
-        end_time = convert_to_time(t_phrase[number_start])
-        print(end_time)
-
-        lower_bound_word = "to"
-        upper_bound_word = "at"
-    else:
-        end_time = convert_to_time(phrase)
-        print(end_time)
-
-        lower_bound_word = "to"
-        upper_bound_word = "in"
-
-    #This analyzes the phrase to figure out what you want to be reminded of
-    reminder_phrase = ""
-    if "timer" in phrase:
-        timers.append(Reminder(end_time, ReminderType.Timer, reminder_phrase="The timer is done"))
-    else:
-        lower_bound = 0
-        upper_bound = 0
-        if lower_bound_word in t_phrase:
-            for i in range(len(t_phrase)):
-                if t_phrase[i] == lower_bound_word:
-                    lower_bound = i + 1
-        if upper_bound_word in t_phrase:
-            for i in range(len(t_phrase)):
-                if t_phrase[i] == upper_bound_word:
-                    upper_bound = i
-        if upper_bound < lower_bound:
-            for word in t_phrase[lower_bound:]:
-                reminder_phrase = reminder_phrase + " " + word
-            reminder_phrase = reminder_phrase + "."
-            reminder_phrase = reminder_phrase.strip()
+    if "cancel" in phrase:
+        if "remind" in phrase:
+            for timer in timers:
+                if timer.get_type() == ReminderType.Reminder:
+                    timers.remove(timer)
+            say("Reminders cancelled")
         else:
-            for word in t_phrase[lower_bound:upper_bound]:
-                reminder_phrase = reminder_phrase + " " + word
-            reminder_phrase = reminder_phrase + "."
-            reminder_phrase = reminder_phrase.strip()
-
-        timers.append(Reminder(end_time, ReminderType.Reminder, reminder_phrase=reminder_phrase))
-
-    print(reminder_phrase)
-
-    if "timer" in phrase:
-        say("Timer set")
+            for timer in timers:
+                if timer.get_type() == ReminderType.Timer:
+                    timers.remove(timer)
+            say("Timers cancelled")
     else:
-        say("Reminder set")
+        if "at" in t_phrase:
+            for i in range(len(t_phrase)):
+                if t_phrase[i] == "at":
+                    number_start = i + 1
+
+            end_time = convert_to_time(t_phrase[number_start])
+            print(end_time)
+
+            lower_bound_word = "to"
+            upper_bound_word = "at"
+        else:
+            end_time = convert_to_time(phrase)
+            print(end_time)
+
+            lower_bound_word = "to"
+            upper_bound_word = "in"
+
+        #This analyzes the phrase to figure out what you want to be reminded of
+        reminder_phrase = ""
+        if "timer" in phrase:
+            timers.append(Reminder(end_time, ReminderType.Timer, reminder_phrase="The timer is done"))
+        else:
+            lower_bound = 0
+            upper_bound = 0
+            if lower_bound_word in t_phrase:
+                for i in range(len(t_phrase)):
+                    if t_phrase[i] == lower_bound_word:
+                        lower_bound = i + 1
+            if upper_bound_word in t_phrase:
+                for i in range(len(t_phrase)):
+                    if t_phrase[i] == upper_bound_word:
+                        upper_bound = i
+            if upper_bound < lower_bound:
+                for word in t_phrase[lower_bound:]:
+                    reminder_phrase = reminder_phrase + " " + word
+                reminder_phrase = reminder_phrase + "."
+                reminder_phrase = reminder_phrase.strip()
+            else:
+                for word in t_phrase[lower_bound:upper_bound]:
+                    reminder_phrase = reminder_phrase + " " + word
+                reminder_phrase = reminder_phrase + "."
+                reminder_phrase = reminder_phrase.strip()
+
+            timers.append(Reminder(end_time, ReminderType.Reminder, reminder_phrase=reminder_phrase))
+
+        print(reminder_phrase)
+
+        if "timer" in phrase:
+            say("Timer set")
+        else:
+            say("Reminder set")
 
 def get_time_left(phrase):
 
@@ -485,11 +542,17 @@ def callback(recognizer, audio):
         print("You said: " + s)
 
         #Listens for the specific keyphrase
-        if keyPhrase in s:
+        if keyPhrase1 in s:
             #This gets a string of everything said after the key phrase was said
-            phraseSaid = s[s.find(keyPhrase)+len(keyPhrase):]
+            phraseSaid = s[s.find(keyPhrase1)+len(keyPhrase1):]
             key_phrase_said = True
             print("Key phrase said")
+        elif keyPhrase2 in s:
+            #This gets a string of everything said after the key phrase was said
+            phraseSaid = s[s.find(keyPhrase2)+len(keyPhrase2):]
+            key_phrase_said = True
+            print("Key phrase said")
+
 
     except sr.UnknownValueError:
         print("Got nothing")
@@ -515,7 +578,15 @@ while True:
             #Timers contain the start and end dates
             if datetime.now() >= timers[i].get_time():
                 stop_listening(wait_for_stop=True)
-                remind(i)
+
+                #If the alarm is silenced set it to not be silent but don't go off
+                #Otherwise just have the alarm ring
+                if timers[i].is_silent == False:
+                    remind(i)
+                else:
+                    timers[i].set_silence(False)
+                    del timers[i]
+
                 stop_listening = recognizer.listen_in_background(mic, callback)
                 break
 
