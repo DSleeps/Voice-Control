@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy
 import time
 import speech_recognition as sr
@@ -9,13 +10,33 @@ from datetime import datetime
 from datetime import date
 from datetime import timedelta
 from threading import Timer
+import random
+
+#All of the Google Calendar Imports
+import httplib2
 import os
+
+from apiclient import discovery
+from oauth2client import client
+from oauth2client import tools
+from oauth2client.file import Storage
+
+try:
+    import argparse
+    flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
+except ImportError:
+    flags = None
+
+# If modifying these scopes, delete your previously saved credentials
+# at ~/.credentials/calendar-python-quickstart.json
+SCOPES = 'https://www.googleapis.com/auth/calendar'
+CLIENT_SECRET_FILE = 'client_secret.json'
+APPLICATION_NAME = 'Google Calendar API Python Quickstart'
 
 digits = "1234567890"
 
 today = date.today()
 tomorrow = today + timedelta(days=1)
-
 
 #Machine Operated Neurological Technological Enhancement
 #The phrase you have to say to activate this
@@ -38,6 +59,9 @@ key_phrase_said = False
 #This determines how many times the system asks for a command if one is not commandFound
 checkCount = 2
 
+#The number of seconds a phrase said to A.T.O.M. can be
+max_seconds = 8
+
 #This is a list of all of the timer/reminders that have been set
 timers = []
 reminder_phrases = []
@@ -47,6 +71,7 @@ phraseSaid = ""
 months = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June", 7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"}
 weekdays = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday", 4: "Friday", 5: "Saturday", 6: "Sunday"}
 weekday_to_num = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+month_names = {"January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6, "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12}
 
 alarms = {0:[], 1:[], 2:[], 3:[], 4:[], 5:[], 6:[]}
 
@@ -103,6 +128,34 @@ class Reminder:
 
 #All of the commands
 #Repeats whatever the person says
+def get_credentials():
+    """Gets valid user credentials from storage.
+
+    If nothing has been stored, or if the stored credentials are invalid,
+    the OAuth2 flow is completed to obtain the new credentials.
+
+    Returns:
+        Credentials, the obtained credential.
+    """
+    home_dir = os.path.expanduser('~')
+    credential_dir = os.path.join(home_dir, '.credentials')
+    if not os.path.exists(credential_dir):
+        os.makedirs(credential_dir)
+    credential_path = os.path.join(credential_dir,
+                                   'calendar-python-quickstart.json')
+
+    store = Storage(credential_path)
+    credentials = store.get()
+    if not credentials or credentials.invalid:
+        flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
+        flow.user_agent = APPLICATION_NAME
+        if flags:
+            credentials = tools.run_flow(flow, store, flags)
+        else: # Needed only for compatibility with Python 2.6
+            credentials = tools.run(flow, store)
+        print('Storing credentials to ' + credential_path)
+    return credentials
+
 def repeat(phrase):
     if len(phrase) == 0:
         say("What do you want me to say?")
@@ -170,10 +223,9 @@ def tokenize(input_string):
     tokenized.append(temp)
     return tokenized
 
-def convert_to_time(time):
-    time_now = datetime.now()
+def convert_to_time(time, time_start=datetime.now()):
     #The len(time) ensures that there were no seconds minutes or hours said
-    if ":" in time or len(time) <= 3:
+    if ":" in time or (not "hour" in time and not "minute" in time and not "second" in time):
         hour_found = False
         hour = ""
         minute = "0"
@@ -181,13 +233,14 @@ def convert_to_time(time):
             #If a colon shows up it means thehour minute is done and it's time to look at minutes
             if l == ':':
                 hour_found = True
+            elif l == ' ':
+                break
             elif hour_found == False:
                 hour = hour + l
             else:
                 minute = minute + l
-        print(hour)
+
         hour = hour.lstrip('0')
-        print(hour)
         hour = int(hour)
         minute = minute.lstrip('0')
         if len(minute) != 0:
@@ -200,7 +253,7 @@ def convert_to_time(time):
         elif hour != 12:
             hour = hour + 12
 
-        timer_time = datetime(time_now.year, time_now.month, time_now.day, hour=hour, minute=minute)
+        timer_time = datetime(time_start.year, time_start.month, time_start.day, hour=hour, minute=minute)
         return timer_time
 
     else:
@@ -227,7 +280,7 @@ def convert_to_time(time):
         #This code would calculate the reminder time by constantly checking to see
         #if the date had changed
         delta_time = timedelta(hours=delta_hours, minutes=delta_minutes, seconds=delta_seconds)
-        end_time = time_now + delta_time
+        end_time = time_start + delta_time
         return end_time
 
 def set_alarm(phrase):
@@ -274,7 +327,14 @@ def set_alarm(phrase):
         for t in t_phrase:
             for char in t:
                 if char in digits:
-                    times.append(t)
+                    #This checks if a.m. or p.m. was said after the time was mentioned, and if it was add it to the time
+                    if t_phrase.index(t)+1 < len(t_phrase):
+                        if t_phrase[t_phrase.index(t)+1][0] in digits:
+                            times.append(t)
+                        else:
+                            times.append(t + " " + t_phrase[t_phrase.index(t)+1])
+                    else:
+                        times.append(t)
                     break
 
         new_reminders = []
@@ -304,7 +364,7 @@ def set_alarm(phrase):
         #If no weekday is said add the alarms to the immediate timer
         if weekday_said == False:
             for reminder in new_reminders:
-                timers.append(Reminder(reminder))
+                timers.append(reminder)
                 print(len(timers))
         else:
             #If a weekday is specified check if it is today
@@ -440,6 +500,421 @@ def remind(timer_num):
     del timers[timer_num]
     print("Stuff removed")
 
+def get_events(phrase):
+    event_phrase_initial = phrase
+    credentials = get_credentials()
+    http = credentials.authorize(httplib2.Http())
+    service = discovery.build('calendar', 'v3', http=http)
+
+    now = datetime.utcnow().isoformat() + 'Z' # 'Z' indicates UTC time
+
+    start_time = datetime.now()
+    end_time = start_time + timedelta(days=2)
+    end_time = end_time.replace(hour=0,minute=0,second=0,microsecond=0)
+
+    calendars = service.calendarList().list().execute()
+    calendar_ids = []
+    for calendar in calendars["items"]:
+        calendar_ids.append(calendar.get('id'))
+        print(calendar.get('id'))
+
+    #This while loop handles getting the date
+    event_phrase = event_phrase_initial
+    while True:
+        t_phrase = tokenize(event_phrase)
+        if "today" in event_phrase:
+            break
+        elif "tomorrow" in event_phrase:
+            one_day = timedelta(days=1)
+            start_time = start_time + one_day
+            end_time = end_time + one_day
+            break
+        elif "on" in t_phrase:
+            for month in list(month_names.keys()):
+                if month in event_phrase:
+                    event_month = month_names[month]
+                    break
+
+            t_phrase = tokenize(event_phrase[event_phrase.index("on"):])
+            event_day = ""
+            for word in t_phrase:
+                if event_day != "":
+                    break
+                for d in digits:
+                    if d in word:
+                        for i in word:
+                            if i in digits:
+                                event_day = str(event_day) + str(i)
+                        event_day = int(event_day)
+                        break
+            print("Day: " + str(event_day))
+            print("Month: " + str(event_month))
+            start_time = start_time.replace(month=event_month, day=event_day)
+            end_time = end_time.replace(month=event_month, day=event_day)
+            print("Start: " + str(start_time))
+            print("End: " + str(end_time))
+            break
+        elif "week" in t_phrase:
+            start_time = start_time + timedelta(weeks=1)
+            end_time = end_time + timedelta(weeks=1)
+            break
+        elif "weeks" in t_phrase:
+            num_of_weeks = int(t_phrase[t_phrase.index("weeks")-1])
+            start_time = start_time + timedelta(weeks=num_of_weeks)
+            end_time = end_time + timedelta(weeks=num_of_weeks)
+            break
+        elif "day" in t_phrase:
+            start_time = start_time + timedelta(days=1)
+            end_time = end_time + timedelta(days=1)
+            break
+        elif "days" in t_phrase:
+            num_of_days = int(t_phrase[t_phrase.index("days")-1])
+            start_time = start_time + timedelta(weeks=num_of_days)
+            end_time = end_time + timedelta(weeks=num_of_days)
+            break
+        else:
+            weekday_num = -1
+            for weekday in weekday_to_num:
+                if weekday in event_phrase:
+                    weekday_num = weekday_to_num[weekday]
+            if weekday_num != -1:
+                next_week = False
+                if "next" in event_phrase:
+                    next_week = True
+
+                first = True
+                in_next_week = False
+                next_day = datetime.now()
+                while True:
+                    next_day = next_day + timedelta(days=1)
+                    print(next_day.weekday())
+                    print(weekday_num)
+                    print(next_day)
+                    if next_day.weekday() == 0 and first == False:
+                        in_next_week = True
+                    if next_day.weekday() == weekday_num:
+                        if next_week == False:
+                            start_time = start_time.replace(year=next_day.year, month=next_day.month, day=next_day.day)
+                            end_time = end_time.replace(year=next_day.year, month=next_day.month, day=next_day.day)
+                            break
+                        elif in_next_week == True and next_week == True:
+                            start_time = start_time.replace(year=next_day.year, month=next_day.month, day=next_day.day)
+                            end_time = end_time.replace(year=next_day.year, month=next_day.month, day=next_day.day)
+                            break
+                    first = False
+                break
+            else:
+                say("What do you want to know the events of?")
+                event_phrase = listenForWord()
+
+                #This ensures that if the person doesn't say on when they mention a specific date it still recognizes it
+                t_event_phrase = tokenize(event_phrase)
+                if t_event_phrase[0] in list(month_names.keys()):
+                    event_phrase = "on " + event_phrase
+
+    if not "today" in event_phrase:
+        print("No today")
+        start_time = start_time.replace(hour=0, minute=0,second=0,microsecond=0)
+
+    #Only want the events for a single day
+    #Has to be two days to include the events that overlap into the next day
+    end_time = start_time + timedelta(days=2)
+    end_time = end_time.replace(hour=0, minute=0,second=0,microsecond=0)
+
+    print('Getting the upcoming events ' + str(start_time.isoformat() + 'Z') + " | " + str(end_time.isoformat() + 'Z'))
+
+    events = []
+    for calendar_id in calendar_ids:
+        eventsResult = service.events().list(
+            calendarId=calendar_id, timeMin=start_time.isoformat() + 'Z', timeMax=end_time.isoformat() + 'Z', maxResults=20, singleEvents=True,
+            orderBy='startTime').execute()
+        events = events + eventsResult.get('items', [])
+
+    if not events:
+        print('No upcoming events found.')
+    event_dict = {}
+    num_list = []
+    for event in events:
+        start = event['start'].get('dateTime', event['start'].get('date'))
+        end = event['end'].get('dateTime', event['end'].get('date'))
+        #This filters out the events that don't start on the right day
+        start_day = start[8:10]
+        start_day = start_day.lstrip('0')
+        if str(start_day) == str(start_time.day):
+            num = float(start[11:13] + "." + start[14:16])
+            num_list.append(num)
+            event_dict[num] = event
+
+    num_list.sort()
+    for num in num_list:
+        start = event_dict[num]['start'].get('dateTime', event['start'].get('date'))
+        end = event_dict[num]['end'].get('dateTime', event['end'].get('date'))
+        #This filters out the events that don't start on the right day
+        start_day = start[8:10]
+        start_day = start_day.lstrip('0')
+        if str(start_day) == str(start_time.day):
+            print(start, event_dict[num]['summary'])
+            print(event_dict[num]['summary'] + " that goes from " + start[11:13] + " " + start[14:16] + " to " + end[11:13] + " " + end[14:16] + ". ")
+            say(event_dict[num]['summary'] + " that goes from " + start[11:13] + " " + start[14:16] + " to " + end[11:13] + " " + end[14:16] + ". ")
+
+def set_event(phrase):
+
+    say("What would you like the event to be?")
+    event_phrase_initial = listenForWord()
+
+    #The while loop handles getting the type of the event
+    event_phrase = event_phrase_initial
+    while True:
+        if "event" in event_phrase:
+            event_type = "event"
+            break
+        elif "reminder" in event_phrase:
+            event_type = "reminder"
+            break
+        say("Is it an event or a reminder?")
+        event_phrase = listenForWord()
+        #Listen for new info
+
+    #This while loop handles getting the start and end time of the event
+    event_phrase = event_phrase_initial
+    while True:
+        t_phrase = tokenize(event_phrase)
+        times = []
+        for word in t_phrase:
+            if ":" in word:
+                times.append(word)
+
+        if len(times) == 0:
+            if "from" in t_phrase:
+                check_times = t_phrase[t_phrase.index("from")+1:t_phrase.index("from")+7] + [""]
+                possible_times = []
+                print(len(check_times))
+                for i in range(len(check_times)):
+                    for d in digits:
+                        if d in check_times[i]:
+                            possible_times.append(check_times[i] + " " + check_times[i+1])
+
+                print(possible_times[0])
+                print(possible_times[1])
+
+                if len(possible_times) > 1:
+                    start_time = convert_to_time(possible_times[0])
+                    end_time = convert_to_time(possible_times[1], time_start=start_time)
+                    break
+        elif len(times) == 1:
+            #The other part is to make sure we get the a.m. or p.m. part of the times
+            start_time = convert_to_time(str(times[0]) + " " + t_phrase[t_phrase.index(times[0]) + 1])
+            end_time = convert_to_time(event_phrase[event_phrase.index(times[0])+len(times[0]):], time_start=start_time)
+            break
+        elif len(times) == 2:
+            start_time = convert_to_time(str(times[0]) + " " + t_phrase[t_phrase.index(times[0]) + 1])
+            end_time = convert_to_time(str(times[1]) + " " + t_phrase[t_phrase.index(times[1]) + 1])
+            break
+        say("What is the start and end time?")
+        event_phrase = listenForWord()
+        #Listen for new info
+
+    #This while loop handles getting the date
+    event_phrase = event_phrase_initial
+    while True:
+        t_phrase = tokenize(event_phrase)
+        if "today" in event_phrase:
+            break
+        elif "tomorrow" in event_phrase:
+            one_day = timedelta(days=1)
+            start_time = start_time + one_day
+            end_time = end_time + one_day
+            break
+        elif "on" in t_phrase:
+            for month in list(month_names.keys()):
+                if month in event_phrase:
+                    event_month = month_names[month]
+                    break
+
+            t_phrase = tokenize(event_phrase[event_phrase.index("on"):])
+            event_day = ""
+            for word in t_phrase:
+                if event_day != "":
+                    break
+                for d in digits:
+                    if d in word:
+                        for i in word:
+                            if i in digits:
+                                event_day = str(event_day) + str(i)
+                        event_day = int(event_day)
+                        break
+            print("Day: " + str(event_day))
+            print("Month: " + str(event_month))
+            start_time = start_time.replace(month=event_month, day=event_day)
+            end_time = end_time.replace(month=event_month, day=event_day)
+            print("Start: " + str(start_time))
+            print("End: " + str(end_time))
+            break
+        elif "week" in t_phrase:
+            start_time = start_time + timedelta(weeks=1)
+            end_time = end_time + timedelta(weeks=1)
+            break
+        elif "weeks" in t_phrase:
+            num_of_weeks = int(t_phrase[t_phrase.index("weeks")-1])
+            start_time = start_time + timedelta(weeks=num_of_weeks)
+            end_time = end_time + timedelta(weeks=num_of_weeks)
+            break
+        elif "day" in t_phrase:
+            start_time = start_time + timedelta(days=1)
+            end_time = end_time + timedelta(days=1)
+            break
+        elif "days" in t_phrase:
+            num_of_days = int(t_phrase[t_phrase.index("days")-1])
+            start_time = start_time + timedelta(weeks=num_of_days)
+            end_time = end_time + timedelta(weeks=num_of_days)
+            break
+        else:
+            weekday_num = -1
+            for weekday in weekday_to_num:
+                if weekday in event_phrase:
+                    weekday_num = weekday_to_num[weekday]
+            if weekday_num != -1:
+                next_week = False
+                if "next" in event_phrase:
+                    next_week = True
+
+                first = True
+                in_next_week = False
+                next_day = datetime.now()
+                while True:
+                    next_day = next_day + timedelta(days=1)
+                    print(next_day.weekday())
+                    print(weekday_num)
+                    print(next_day)
+                    if next_day.weekday() == 0 and first == False:
+                        in_next_week = True
+                    if next_day.weekday() == weekday_num:
+                        if next_week == False:
+                            start_time = start_time.replace(year=next_day.year, month=next_day.month, day=next_day.day)
+                            end_time = end_time.replace(year=next_day.year, month=next_day.month, day=next_day.day)
+                            break
+                        elif in_next_week == True and next_week == True:
+                            start_time = start_time.replace(year=next_day.year, month=next_day.month, day=next_day.day)
+                            end_time = end_time.replace(year=next_day.year, month=next_day.month, day=next_day.day)
+                            break
+                    first = False
+                break
+            else:
+                say("What day is the event on?")
+                event_phrase = listenForWord()
+
+                #This ensures that if the person doesn't say on when they mention a specific date it still recognizes it
+                t_event_phrase = tokenize(event_phrase)
+                if t_event_phrase[0] in list(month_names.keys()):
+                    event_phrase = "on " + event_phrase
+
+    #This while loop handles getting the title of the event
+    event_phrase = event_phrase_initial
+    first = True
+    while True:
+        if "called" in event_phrase:
+            cut_phrase = event_phrase[event_phrase.index("called")+6:]
+            if "that" in cut_phrase:
+                title = cut_phrase[0:cut_phrase.index("that")]
+                title = title.strip()
+            else:
+                title = cut_phrase
+                title = title.strip()
+            break
+        if "titled" in event_phrase:
+            cut_phrase = event_phrase[event_phrase.index("titled")+6:]
+            if "that" in cut_phrase:
+                title = cut_phrase[:cut_phrase.index("that")]
+                title = title.strip()
+            else:
+                title = cut_phrase
+                title = title.strip()
+            break
+        if first == False:
+            title = event_phrase
+            break
+
+        say("What is the event called?")
+        event_phrase = listenForWord()
+        first = False
+        #Listen for new info
+
+    print(title)
+    print(start_time.isoformat())
+    print(end_time.isoformat())
+    print("Event Phrase: " + event_phrase)
+
+    #The colors go from 1 to 11
+    '''
+    1 is lavendar
+    2 is light green
+    3 is pink
+    4 is salmon
+    5 is yellow
+    6 is light orange
+    7 is light blue
+    8 is grey
+    9 is dark blue
+    10 is green
+    11 is red
+    '''
+    #The numbers are all in a string format though
+
+    concert_words = ["concert", "gig", "performance"]
+    rehearsal_words = ["rehearsal", "practice"]
+    social_words = ["dinner", "movie", "lunch", "hang out"]
+
+    #Picking the color
+    color_id = ''
+    event_type_found = False
+    for word in concert_words:
+        if word in event_phrase:
+            color_id = '2'
+            event_type_found = True
+            break
+    for word in rehearsal_words:
+        if word in event_phrase:
+            color_id = '6'
+            event_type_found = True
+            break
+    for word in social_words:
+        if word in event_phrase:
+            color_id = '7'
+            event_type_found = True
+            break
+    if event_type_found == False:
+        while True:
+            color_id = str(random.randint(1,11))
+            #Can't be any of the colors mentioned so far
+            if color_id == '2' or color_id == '6' or color_id == '7':
+                break
+
+    print("Color ID: " + str(color_id))
+    #Want to eventually figure out the time zone on it's own, but for now I manually inputed it
+    event = {
+        'summary': title,
+        'colorId': color_id,
+        'start':{
+            'dateTime': start_time.isoformat(),
+            'timeZone': 'America/New_York'
+        },
+        'end': {
+            "dateTime": end_time.isoformat(),
+            'timeZone': 'America/New_York'
+        },
+    }
+
+    credentials = get_credentials()
+    http = credentials.authorize(httplib2.Http())
+    service = discovery.build('calendar', 'v3', http=http)
+
+    #This is basically the event class that you can do stuff to
+    events = service.events()
+
+    #This is how you add events
+    events.insert(calendarId='primary', body=event).execute()
+    say("An event has been added called " + str(title) + " on " + str(start_time.month) + " " + str(start_time.day) + " from " + str(start_time.hour) + " " + str(start_time.minute) + " to " + str(end_time.hour) + " " + str(end_time.minute))
+
 def get_date(phrase):
     today_date = date.today().timetuple()
 
@@ -473,7 +948,7 @@ def get_time(phrase):
 def exit_program(phrase):
     os._exit(1)
 
-commands = {"say": repeat, "weather": getWeather, "temp": getWeather, "remind": set_reminder, "timer": set_reminder, "alarm":set_alarm, "left": get_time_left, "time": get_time, "date": get_date, "exit": exit_program}
+commands = {"say": repeat, "weather": getWeather, "temp": getWeather, "remind": set_reminder, "timer": set_reminder, "alarm":set_alarm, "left": get_time_left, "time": get_time, "date": get_date, "calendar":set_event, "schedule":get_events, "exit": exit_program}
 
 def say(phrase):
     engine.say(phrase)
@@ -481,8 +956,11 @@ def say(phrase):
 
 def listenForWord():
     with mic as source:
+        #Just added this line, might slow it down a toooonnnnn
+        recognizer.adjust_for_ambient_noise(source)
+
         print("Request")
-        audio = recognizer.listen(source)
+        audio = recognizer.listen(source, phrase_time_limit=max_seconds)
 
     #Processes the audio
     print("Processing")
@@ -571,6 +1049,7 @@ while True:
     if key_phrase_said == True:
         stop_listening(wait_for_stop=True)
         listen_for_command(phraseSaid)
+        print("Done with commands")
         key_phrase_said = False
         stop_listening = recognizer.listen_in_background(mic, callback)
     if len(timers) != 0:
@@ -581,7 +1060,7 @@ while True:
 
                 #If the alarm is silenced set it to not be silent but don't go off
                 #Otherwise just have the alarm ring
-                if timers[i].is_silent == False:
+                if timers[i].is_silent() == False:
                     remind(i)
                 else:
                     timers[i].set_silence(False)
